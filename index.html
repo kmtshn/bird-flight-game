@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Bird Flight</title>
+  <style>
+    html,body{margin:0;height:100%;overflow:hidden;background:#071423;color:#fff;font-family:system-ui,sans-serif}
+    #hud{position:fixed;z-index:2;left:18px;top:16px;padding:12px 14px;border-radius:12px;background:#071423cc;backdrop-filter:blur(8px);line-height:1.5;font-size:14px}
+    #status{color:#9bdcff;margin-top:4px;font-size:12px}
+    canvas{display:block}
+  </style>
+</head>
+<body>
+  <div id="hud"><strong>Bird Flight</strong><br>WASD / 矢印: 飛行　Space: 上昇　Shift: 下降<br><span id="status">読み込み中…</span></div>
+  <script type="importmap">
+    {"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.180.0/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.180.0/examples/jsm/"}}
+  </script>
+  <script type="module">
+    import * as THREE from 'three';
+    import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x071423);
+    scene.fog = new THREE.Fog(0x071423, 35, 120);
+    const camera = new THREE.PerspectiveCamera(58, innerWidth/innerHeight, .05, 300);
+    camera.position.set(0, 3, 8);
+    const renderer = new THREE.WebGLRenderer({antialias:true});
+    renderer.setPixelRatio(Math.min(devicePixelRatio,2));
+    renderer.setSize(innerWidth,innerHeight);
+    renderer.outputColorSpace = THREE.SRGBColorSpace;
+    document.body.appendChild(renderer.domElement);
+
+    scene.add(new THREE.HemisphereLight(0xb9e5ff,0x193047,2.2));
+    const sun = new THREE.DirectionalLight(0xffffff,3.2); sun.position.set(-8,14,8); scene.add(sun);
+
+    const world = new THREE.Group(); scene.add(world);
+    const ground = new THREE.Mesh(new THREE.PlaneGeometry(240,240),new THREE.MeshStandardMaterial({color:0x102d33,roughness:1}));
+    ground.rotation.x=-Math.PI/2; ground.position.y=-2.8; world.add(ground);
+    const islandMat = new THREE.MeshStandardMaterial({color:0x1d5a58,roughness:1});
+    for(let i=0;i<28;i++){
+      const a=i*2.399, r=8+(i%7)*4, h=1.2+(i%5)*.55;
+      const island=new THREE.Mesh(new THREE.ConeGeometry(1.5+(i%3)*.5,h,7),islandMat);
+      island.position.set(Math.cos(a)*r,-2.8+h/2,Math.sin(a)*r-18); world.add(island);
+    }
+
+    const keys = new Set(); addEventListener('keydown',e=>{keys.add(e.key.toLowerCase()); if([' ','arrowup','arrowdown','arrowleft','arrowright'].includes(e.key.toLowerCase())) e.preventDefault()}); addEventListener('keyup',e=>keys.delete(e.key.toLowerCase()));
+    let bird, mixer, wingAction, velocity=new THREE.Vector3(), t=0;
+    const status=document.querySelector('#status');
+    new GLTFLoader().load('bird5.glb',gltf=>{
+      bird=gltf.scene; bird.scale.setScalar(1.55); bird.position.set(0,1,0); scene.add(bird);
+      bird.traverse(o=>{if(o.isMesh){o.castShadow=true;o.frustumCulled=false}});
+      if(gltf.animations.length){mixer=new THREE.AnimationMixer(bird); mixer.clipAction(gltf.animations[0]).play()}
+      status.textContent='飛行中。モデル読込完了';
+    },undefined,()=>status.textContent='bird5.glbを読み込めませんでした');
+
+    const clock=new THREE.Clock();
+    function animate(){
+      requestAnimationFrame(animate); const dt=Math.min(clock.getDelta(),.05); t+=dt;
+      if(bird){
+        const x=(keys.has('a')||keys.has('arrowleft')?-1:0)+(keys.has('d')||keys.has('arrowright')?1:0);
+        const z=(keys.has('w')||keys.has('arrowup')?1:0)+(keys.has('s')||keys.has('arrowdown')?-1:0);
+        const y=(keys.has(' ')?1:0)+(keys.has('shift')?-1:0);
+        const input=new THREE.Vector3(x,y,z); if(input.lengthSq()) input.normalize();
+        velocity.lerp(input.multiplyScalar(7),1-Math.pow(.001,dt)); bird.position.addScaledVector(velocity,dt);
+        bird.position.x=THREE.MathUtils.clamp(bird.position.x,-18,18); bird.position.y=THREE.MathUtils.clamp(bird.position.y,-1.5,14); bird.position.z=THREE.MathUtils.clamp(bird.position.z,-55,12);
+        bird.rotation.z=THREE.MathUtils.lerp(bird.rotation.z,-velocity.x*.08,1-Math.pow(.01,dt)); bird.rotation.x=THREE.MathUtils.lerp(bird.rotation.x,velocity.z*.05,1-Math.pow(.01,dt));
+        const desired=camera.position.clone().lerp(new THREE.Vector3(bird.position.x,bird.position.y+2.2,bird.position.z+8),1-Math.pow(.002,dt)); camera.position.copy(desired); camera.lookAt(bird.position.x,bird.position.y+.2,bird.position.z-2);
+      }
+      if(mixer)mixer.update(dt); renderer.render(scene,camera);
+    }
+    animate(); addEventListener('resize',()=>{camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();renderer.setSize(innerWidth,innerHeight)});
+  </script>
+</body>
+</html>
