@@ -9,10 +9,21 @@
     #hud{position:fixed;z-index:2;left:18px;top:16px;padding:12px 14px;border-radius:12px;background:#071423cc;backdrop-filter:blur(8px);line-height:1.5;font-size:14px}
     #status{color:#9bdcff;margin-top:4px;font-size:12px}
     canvas{display:block}
+    #touch{display:none;position:fixed;z-index:3;inset:auto 18px 18px 18px;justify-content:space-between;align-items:end;pointer-events:none;user-select:none;touch-action:none}
+    #stick{width:118px;height:118px;border:2px solid #ffffff66;border-radius:50%;background:#07142388;position:relative;pointer-events:auto;touch-action:none}
+    #knob{width:48px;height:48px;border-radius:50%;background:#9bdcffcc;position:absolute;left:33px;top:33px;box-shadow:0 0 18px #9bdcff66}
+    #buttons{display:flex;gap:10px;pointer-events:auto}
+    .touch-btn{width:62px;height:62px;border:1px solid #ffffff66;border-radius:18px;background:#071423bb;color:#fff;font-weight:700;font-size:13px;touch-action:none}
+    .touch-btn:active{background:#277b9dcc}
+    @media (pointer:coarse), (max-width:700px){#touch{display:flex}#hud{left:10px;top:10px;font-size:12px;padding:9px 11px}}
   </style>
 </head>
 <body>
-  <div id="hud"><strong>Bird Flight</strong><br>WASD / 矢印: 飛行　Space: 上昇　Shift: 下降<br><span id="status">読み込み中…</span></div>
+  <div id="hud"><strong>Bird Flight</strong><br><span class="desktop-help">WASD / 矢印: 飛行　Space: 上昇　Shift: 下降</span><span class="mobile-help">左スティック: 飛行　▲▼: 高さ</span><br><span id="status">読み込み中…</span></div>
+  <div id="touch" aria-label="タッチ操作">
+    <div id="stick" aria-label="移動スティック"><div id="knob"></div></div>
+    <div id="buttons"><button class="touch-btn" data-key=" ">▲<br>上昇</button><button class="touch-btn" data-key="shift">▼<br>下降</button></div>
+  </div>
   <script type="importmap">
     {"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.180.0/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.180.0/examples/jsm/"}}
   </script>
@@ -44,7 +55,26 @@
       island.position.set(Math.cos(a)*r,-2.8+h/2,Math.sin(a)*r-18); world.add(island);
     }
 
-    const keys = new Set(); addEventListener('keydown',e=>{keys.add(e.key.toLowerCase()); if([' ','arrowup','arrowdown','arrowleft','arrowright'].includes(e.key.toLowerCase())) e.preventDefault()}); addEventListener('keyup',e=>keys.delete(e.key.toLowerCase()));
+    const keys = new Set();
+    addEventListener('keydown',e=>{keys.add(e.key.toLowerCase()); if([' ','arrowup','arrowdown','arrowleft','arrowright'].includes(e.key.toLowerCase())) e.preventDefault()});
+    addEventListener('keyup',e=>keys.delete(e.key.toLowerCase()));
+    const touchInput={x:0,z:0};
+    const stick=document.querySelector('#stick'), knob=document.querySelector('#knob');
+    let stickPointer=null;
+    function updateStick(e){
+      const r=stick.getBoundingClientRect(), max=35, dx=e.clientX-(r.left+r.width/2), dy=e.clientY-(r.top+r.height/2);
+      const len=Math.min(Math.hypot(dx,dy),max), a=Math.atan2(dy,dx), px=Math.cos(a)*len, py=Math.sin(a)*len;
+      knob.style.transform=`translate(${px}px,${py}px)`; touchInput.x=px/max; touchInput.z=py/max;
+    }
+    function resetStick(){stickPointer=null; knob.style.transform='translate(0,0)'; touchInput.x=0; touchInput.z=0}
+    stick.addEventListener('pointerdown',e=>{stickPointer=e.pointerId; stick.setPointerCapture(e.pointerId); updateStick(e)});
+    stick.addEventListener('pointermove',e=>{if(e.pointerId===stickPointer)updateStick(e)});
+    stick.addEventListener('pointerup',resetStick); stick.addEventListener('pointercancel',resetStick);
+    document.querySelectorAll('.touch-btn').forEach(btn=>{
+      const key=btn.dataset.key;
+      btn.addEventListener('pointerdown',e=>{e.preventDefault(); keys.add(key); btn.setPointerCapture(e.pointerId)});
+      btn.addEventListener('pointerup',()=>keys.delete(key)); btn.addEventListener('pointercancel',()=>keys.delete(key));
+    });
     let bird, mixer, wingAction, velocity=new THREE.Vector3(), t=0;
     const status=document.querySelector('#status');
     new GLTFLoader().load('bird5.glb',gltf=>{
@@ -58,8 +88,8 @@
     function animate(){
       requestAnimationFrame(animate); const dt=Math.min(clock.getDelta(),.05); t+=dt;
       if(bird){
-        const x=(keys.has('a')||keys.has('arrowleft')?-1:0)+(keys.has('d')||keys.has('arrowright')?1:0);
-        const z=(keys.has('w')||keys.has('arrowup')?1:0)+(keys.has('s')||keys.has('arrowdown')?-1:0);
+        const x=(keys.has('a')||keys.has('arrowleft')?-1:0)+(keys.has('d')||keys.has('arrowright')?1:0)+touchInput.x;
+        const z=(keys.has('w')||keys.has('arrowup')?1:0)+(keys.has('s')||keys.has('arrowdown')?-1:0)+touchInput.z;
         const y=(keys.has(' ')?1:0)+(keys.has('shift')?-1:0);
         const input=new THREE.Vector3(x,y,z); if(input.lengthSq()) input.normalize();
         velocity.lerp(input.multiplyScalar(7),1-Math.pow(.001,dt)); bird.position.addScaledVector(velocity,dt);
