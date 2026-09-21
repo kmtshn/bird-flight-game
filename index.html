@@ -75,22 +75,14 @@
       btn.addEventListener('pointerdown',e=>{e.preventDefault(); keys.add(key); btn.setPointerCapture(e.pointerId)});
       btn.addEventListener('pointerup',()=>keys.delete(key)); btn.addEventListener('pointercancel',()=>keys.delete(key));
     });
-    let bird, mixer, wingAction, velocity=new THREE.Vector3(), t=0, wingBones=[], animatedBones=[];
+    let bird, mixer, wingAction, velocity=new THREE.Vector3(), t=0;
     const status=document.querySelector('#status');
-    new GLTFLoader().load('bird5.glb',gltf=>{
+    new GLTFLoader().load('bird_flight_animated.glb',gltf=>{
       bird=gltf.scene; bird.scale.setScalar(1.55); bird.position.set(0,1,0); scene.add(bird);
-      bird.traverse(o=>{
-        if(o.isMesh){o.castShadow=true;o.frustumCulled=false}
-        if(o.isBone){
-          const n=o.name.toLowerCase();
-          if(/wing|arm|shoulder|forearm|hand|feather/.test(n) || Math.abs(o.position.x)>0.18){
-            wingBones.push({bone:o,baseZ:o.rotation.z,baseX:o.rotation.x,side:o.position.x<0?-1:1});
-          }
-        }
-      });
+      bird.traverse(o=>{if(o.isMesh){o.castShadow=true;o.frustumCulled=false}});
       if(gltf.animations.length){mixer=new THREE.AnimationMixer(bird); mixer.clipAction(gltf.animations[0]).play()}
       status.textContent='飛行中。モデル読込完了';
-    },undefined,()=>status.textContent='bird5.glbを読み込めませんでした');
+    },undefined,()=>status.textContent='アニメーションGLBを読み込めませんでした');
 
     const clock=new THREE.Clock();
     function animate(){
@@ -104,13 +96,6 @@
         bird.position.x=THREE.MathUtils.clamp(bird.position.x,-18,18); bird.position.y=THREE.MathUtils.clamp(bird.position.y,-1.5,14); bird.position.z=THREE.MathUtils.clamp(bird.position.z,-55,12);
         bird.rotation.z=THREE.MathUtils.lerp(bird.rotation.z,-velocity.x*.08,1-Math.pow(.01,dt)); bird.rotation.x=THREE.MathUtils.lerp(bird.rotation.x,velocity.z*.05,1-Math.pow(.01,dt));
         const desired=camera.position.clone().lerp(new THREE.Vector3(bird.position.x,bird.position.y+2.2,bird.position.z+8),1-Math.pow(.002,dt)); camera.position.copy(desired); camera.lookAt(bird.position.x,bird.position.y+.2,bird.position.z-2);
-      }
-      if(wingBones.length){
-        const flap=Math.sin(t*8.5)*0.52+Math.sin(t*17.0)*0.08;
-        wingBones.forEach(({bone,baseZ,baseX,side})=>{
-          bone.rotation.z=baseZ+flap*side;
-          bone.rotation.x=baseX+Math.sin(t*8.5+side*.35)*0.12;
-        });
       }
       if(mixer)mixer.update(dt); renderer.render(scene,camera);
     }
