@@ -77,10 +77,12 @@
     });
     let bird, mixer, wingAction, velocity=new THREE.Vector3(), t=0;
     const status=document.querySelector('#status');
-    new GLTFLoader().load('bird_flight_animated.glb',gltf=>{
+    new GLTFLoader().load('bird_wind_baked.glb',gltf=>{
       bird=gltf.scene; bird.scale.setScalar(1.55); bird.position.set(0,1,0); scene.add(bird);
       bird.traverse(o=>{if(o.isMesh){o.castShadow=true;o.frustumCulled=false}});
-      if(gltf.animations.length){mixer=new THREE.AnimationMixer(bird); mixer.clipAction(gltf.animations[0]).play()}
+      const flightClip=gltf.animations.find(clip=>clip.name==='Bird_Flight_Fresh');
+      if(!flightClip){status.textContent='飛行アニメーションが見つかりません'; return}
+      mixer=new THREE.AnimationMixer(bird); mixer.clipAction(flightClip).play();
       status.textContent='飛行中。モデル読込完了';
     },undefined,()=>status.textContent='アニメーションGLBを読み込めませんでした');
 
