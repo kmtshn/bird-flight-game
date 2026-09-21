@@ -65,14 +65,18 @@
       btn.addEventListener('pointerdown',e=>{e.preventDefault(); keys.add(key); btn.setPointerCapture(e.pointerId)});
       btn.addEventListener('pointerup',()=>keys.delete(key)); btn.addEventListener('pointercancel',()=>keys.delete(key));
     });
-    let bird, mixer, wingAction, velocity=new THREE.Vector3(), t=0;
+    let bird, mixer, velocity=new THREE.Vector3(), t=0, heading=Math.PI;
+    const chasePosition=new THREE.Vector3();
     const status=document.querySelector('#status');
     new GLTFLoader().load('bird_wind_baked.glb',gltf=>{
-      bird=gltf.scene; bird.scale.setScalar(1.55); bird.position.set(0,1,0); scene.add(bird);
+      bird=new THREE.Group();
+      const model=gltf.scene; model.scale.setScalar(1.55); bird.add(model);
+      bird.rotation.order='YXZ'; bird.rotation.y=heading;
+      bird.position.set(0,1,0); scene.add(bird);
       bird.traverse(o=>{if(o.isMesh){o.castShadow=true;o.frustumCulled=false}});
       const flightClip=gltf.animations.find(clip=>clip.name==='Bird_Flight_Fresh');
       if(!flightClip){status.textContent='飛行アニメーションが見つかりません'; return}
-      mixer=new THREE.AnimationMixer(bird); mixer.clipAction(flightClip).play();
+      mixer=new THREE.AnimationMixer(model); mixer.clipAction(flightClip).play();
       status.textContent='飛行中。モデル読込完了';
     },undefined,()=>status.textContent='アニメーションGLBを読み込めませんでした');
 
@@ -81,13 +85,24 @@
       requestAnimationFrame(animate); const dt=Math.min(clock.getDelta(),.05); t+=dt;
       if(bird){
         const x=(keys.has('a')||keys.has('arrowleft')?-1:0)+(keys.has('d')||keys.has('arrowright')?1:0)+touchInput.x;
-        const z=(keys.has('w')||keys.has('arrowup')?1:0)+(keys.has('s')||keys.has('arrowdown')?-1:0)+touchInput.z;
+        const z=(keys.has('w')||keys.has('arrowup')?-1:0)+(keys.has('s')||keys.has('arrowdown')?1:0)+touchInput.z;
         const y=(keys.has(' ')?1:0)+(keys.has('shift')?-1:0);
-        const input=new THREE.Vector3(x,y,z); if(input.lengthSq()) input.normalize();
+        const input=new THREE.Vector3(x,y,z); if(input.lengthSq()>1) input.normalize();
         velocity.lerp(input.multiplyScalar(7),1-Math.pow(.001,dt)); bird.position.addScaledVector(velocity,dt);
         bird.position.x=THREE.MathUtils.clamp(bird.position.x,-90,90); bird.position.y=THREE.MathUtils.clamp(bird.position.y,Math.max(-1,groundHeight(bird.position.x,bird.position.z)+2),80); bird.position.z=THREE.MathUtils.clamp(bird.position.z,-180,120);
-        bird.rotation.z=THREE.MathUtils.lerp(bird.rotation.z,-velocity.x*.08,1-Math.pow(.01,dt)); bird.rotation.x=THREE.MathUtils.lerp(bird.rotation.x,velocity.z*.05,1-Math.pow(.01,dt));
-        const desired=camera.position.clone().lerp(new THREE.Vector3(bird.position.x,bird.position.y+2.2,bird.position.z+8),1-Math.pow(.002,dt)); camera.position.copy(desired); camera.lookAt(bird.position.x,bird.position.y+.2,bird.position.z-2);
+        let turn=0;
+        if(velocity.x*velocity.x+velocity.z*velocity.z>.04){
+          const targetHeading=Math.atan2(velocity.x,velocity.z);
+          turn=Math.atan2(Math.sin(targetHeading-heading),Math.cos(targetHeading-heading));
+          heading+=turn*(1-Math.exp(-5*dt));
+        }
+        bird.rotation.y=heading;
+        bird.rotation.z=THREE.MathUtils.lerp(bird.rotation.z,THREE.MathUtils.clamp(-turn*.35,-.4,.4),1-Math.exp(-6*dt));
+        bird.rotation.x=THREE.MathUtils.lerp(bird.rotation.x,-velocity.y*.045,1-Math.exp(-5*dt));
+        chasePosition.set(bird.position.x-Math.sin(heading)*8,bird.position.y+2.8,bird.position.z-Math.cos(heading)*8);
+        chasePosition.y=Math.max(chasePosition.y,groundHeight(chasePosition.x,chasePosition.z)+2);
+        camera.position.lerp(chasePosition,1-Math.exp(-3*dt));
+        camera.lookAt(bird.position.x+Math.sin(heading)*2,bird.position.y+.5,bird.position.z+Math.cos(heading)*2);
       }
       if(mixer)mixer.update(dt); landscape.update(dt,t); renderer.render(scene,camera);
     }
